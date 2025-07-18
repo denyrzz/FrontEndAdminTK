@@ -1,236 +1,219 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
-import Modal from '../components/Modal.vue'; // Asumsikan Anda punya komponen Modal
+import { ref, reactive, onMounted } from 'vue';
+import Modal from '../components/Modal.vue';
 
-const API_URL = 'http://localhost:3000/api'; // Sesuaikan dengan URL API backend Anda
+const API_URL = 'http://localhost:3000/api';
 const returns = ref([]);
-const loans = ref([]); // Untuk dropdown pilihan peminjaman
-const isModalOpen = ref(false);
-const isEditing = ref(false);
+const peminjamanOptions = ref([]);
 const isLoading = ref(false);
 const errorMessage = ref('');
+const isModalOpen = ref(false);
 
 const currentReturn = reactive({
-    id_pengembalian: null,
-    peminjaman_id: null,
-    tanggal_kembali: new Date().toISOString().split('T')[0], 
-    kondisi_buku: 'Baik', 
-    denda: 0,
+  peminjaman_id: '',
+  kondisi_buku: '',
 });
 
 const fetchReturns = async () => {
+  try {
     isLoading.value = true;
     errorMessage.value = '';
-    try {
-        const response = await fetch(`${API_URL}/pengembalian`, { credentials: 'include' });
-        const result = await response.json();
+    const response = await fetch(`${API_URL}/pengembalian`, { credentials: 'include' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.msg || 'Gagal mengambil data pengembalian');
 
-        if (!response.ok) {
-            throw new Error(result.msg || 'Gagal mengambil data pengembalian.');
-        }
-
-        const formattedReturns = result.map(ret => ({
-            ...ret,
-            judul_buku: ret.Peminjaman?.Buku?.judul || 'Tidak Diketahui',
-            nama_peminjam: ret.Peminjaman?.User?.nama || ret.Peminjaman?.User?.email?.split('@')[0] || 'Tidak Diketahui',
-            nomor_resi: ret.Peminjaman?.KartuPustaka?.nomor_resi || 'N/A',
-        }));
-        returns.value = formattedReturns;
-
-    } catch (error) {
-        console.error('Error fetching returns:', error);
-        errorMessage.value = error.message;
-    } finally {
-        isLoading.value = false;
-    }
+    returns.value = result.map(item => ({
+      id_pengembalian: item.id_pengembalian,
+      peminjaman_id: item.peminjaman_id,
+      tanggal_kembali: item.tanggal_kembali,
+      kondisi_buku: item.kondisi_buku || 'Baik',
+      denda: item.denda || 0,
+      User: {
+        nama: item.peminjaman?.user?.nama || 'Unknown'
+      },
+      Buku: {
+        judul: item.peminjaman?.buku?.judul || 'Unknown'
+      },
+      KartuPustaka: {
+        nomor_resi: item.peminjaman?.kartu_pustaka?.nomor_resi || 'N/A'
+      }
+    }));
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    isLoading.value = false;
+  }
 };
 
-const fetchLoanOptions = async () => {
-    try {
-        const response = await fetch(`${API_URL}/peminjaman`, { credentials: 'include' });
-        const result = await response.json();
+const fetchAvailablePeminjaman = async () => {
+  try {
+    const response = await fetch(`${API_URL}/peminjaman`, { credentials: 'include' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.msg || 'Gagal memuat data peminjaman');
 
-        if (!response.ok) {
-            throw new Error(result.msg || 'Gagal mengambil data peminjaman untuk opsi.');
-        }
-
-        loans.value = result.filter(loan => loan.status === 'Dipinjam').map(loan => ({
-            id: loan.id_peminjaman,
-            display: `${loan.Buku?.judul || 'Unknown Buku'} - ${loan.User?.nama || loan.User?.email?.split('@')[0] || 'Unknown User'} (ID: ${loan.id_peminjaman})`
-        }));
-    } catch (error) {
-        console.error('Error fetching loan options:', error);
-    }
+    peminjamanOptions.value = data;
+  } catch (error) {
+    alert(error.message);
+  }
 };
 
-onMounted(() => {
-    fetchReturns();
-    fetchLoanOptions();
-});
+const openAddModal = async () => {
+  resetForm();
+  await fetchAvailablePeminjaman();
+  isModalOpen.value = true; 
+};
+
+const resetForm = () => {
+  currentReturn.peminjaman_id = '';
+  currentReturn.kondisi_buku = '';
+};
+
+
+const closeModal = () => {
+  isModalOpen.value = false;
+};
 
 const saveReturn = async () => {
-    try {
-        let url = `${API_URL}/pengembalian`;
-        let method = 'POST';
+  if (!currentReturn.peminjaman_id || !currentReturn.kondisi_buku.trim()) {
+    alert('Silakan pilih peminjaman dan isi kondisi buku.');
+    return;
+  }
 
-        if (isEditing.value) {
-            url = `${API_URL}/pengembalian/${currentReturn.id_pengembalian}`;
-            method = 'PUT';
-        }
+  try {
+    const response = await fetch(`${API_URL}/pengembalian`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(currentReturn)
+    });
 
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentReturn),
-            credentials: 'include',
-        });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.msg || 'Gagal menyimpan data');
 
-        if (!response.ok) {
-            const errorResult = await response.json();
-            throw new Error(errorResult.msg || "Gagal menyimpan data pengembalian.");
-        }
-
-        await fetchReturns(); 
-        closeModal();
-    } catch (error) {
-        console.error("Error saving return:", error);
-        alert(`Terjadi kesalahan: ${error.message}`);
-    }
+    await fetchReturns();
+    closeModal();
+    alert(result.msg + (result.info_denda ? `\n${result.info_denda}` : ''));
+  } catch (error) {
+    alert('Gagal menyimpan: ' + error.message);
+  }
 };
 
 const deleteReturn = async (id) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus data pengembalian ID ${id}?`)) {
-        try {
-            const response = await fetch(`${API_URL}/pengembalian/${id}`, {
-                method: 'DELETE',
-                credentials: 'include',
-            });
-            if (!response.ok) throw new Error("Gagal menghapus data pengembalian.");
-            await fetchReturns(); // Refresh data
-        } catch (error) {
-            console.error("Error deleting return:", error);
-            alert("Terjadi kesalahan saat menghapus data.");
-        }
-    }
-};
-
-const resetCurrentReturn = () => {
-    Object.assign(currentReturn, {
-        id_pengembalian: null,
-        peminjaman_id: null,
-        tanggal_kembali: new Date().toISOString().split('T')[0],
-        kondisi_buku: 'Baik',
-        denda: 0,
+  if (!confirm('Yakin ingin menghapus data pengembalian ini?')) return;
+  try {
+    const response = await fetch(`${API_URL}/pengembalian/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
     });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.msg || 'Gagal menghapus');
+
+    await fetchReturns();
+    alert('Data berhasil dihapus.');
+  } catch (error) {
+    alert(error.message);
+  }
 };
 
-const openAddModal = () => {
-    isEditing.value = false;
-    resetCurrentReturn();
-    isModalOpen.value = true;
-};
+function formatTanggal(tgl) {
+  const d = new Date(tgl);
+  return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: '2-digit' });
+}
 
-const openEditModal = (ret) => {
-    isEditing.value = true;
-    Object.assign(currentReturn, {
-        ...ret,
-        peminjaman_id: ret.peminjaman_id,
-    });
-    isModalOpen.value = true;
-};
-
-const closeModal = () => {
-    isModalOpen.value = false;
-};
+onMounted(() => {
+  fetchReturns();
+});
 </script>
 
 <template>
-    <div class="page-container">
-        <div class="page-header">
-            <h1>Kelola Pengembalian Peminjaman</h1>
-            <button @click.stop="openAddModal" class="btn btn-primary">Tambah Pengembalian</button>
-        </div>
-
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Buku</th>
-                        <th>Peminjam</th>
-                        <th>No. Resi</th>
-                        <th>Tgl Kembali</th>
-                        <th>Kondisi Buku</th>
-                        <th>Denda (Rp)</th>
-                        <th>Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="isLoading">
-                        <td colspan="8" class="text-center">Memuat data pengembalian...</td>
-                    </tr>
-                    <tr v-else-if="errorMessage">
-                        <td colspan="8" class="text-center text-danger">Error: {{ errorMessage }}</td>
-                    </tr>
-                    <tr v-else-if="returns.length === 0">
-                        <td colspan="8" class="text-center">Tidak ada data pengembalian yang tersedia.</td>
-                    </tr>
-                    <template v-else>
-                        <tr v-for="ret in returns" :key="ret.id_pengembalian">
-                            <td>{{ ret.id_pengembalian }}</td>
-                            <td>{{ ret.judul_buku }}</td>
-                            <td>{{ ret.nama_peminjam }}</td>
-                            <td>{{ ret.nomor_resi }}</td>
-                            <td>{{ ret.tanggal_kembali }}</td>
-                            <td>
-                                <span :class="['status-badge', ret.kondisi_buku.toLowerCase().replace(/\s/g, '-')]">{{ ret.kondisi_buku }}</span>
-                            </td>
-                            <td>Rp {{ ret.denda.toLocaleString('id-ID') }}</td>
-                            <td class="action-buttons">
-                                <button @click.stop="openEditModal(ret)" class="btn btn-secondary" title="Edit">E</button>
-                                <button @click.stop="deleteReturn(ret.id_pengembalian)" class="btn btn-danger" title="Delete">D</button>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
-        </div>
-
-        <Modal :show="isModalOpen" @close="closeModal">
-            <template #header>
-                <h3>{{ isEditing ? 'Edit Pengembalian' : 'Tambah Pengembalian Baru' }}</h3>
-            </template>
-            <template #body>
-                <div class="form-group">
-                    <label for="peminjaman">Peminjaman</label>
-                    <select id="peminjaman" v-model="currentReturn.peminjaman_id" class="form-input" :disabled="isEditing">
-                        <option :value="null" disabled>Pilih Peminjaman</option>
-                        <option v-for="loan in loans" :key="loan.id" :value="loan.id">{{ loan.display }}</option>
-                    </select>
-                    <small v-if="isEditing" class="text-info">Peminjaman tidak bisa diubah setelah dibuat.</small>
-                </div>
-                <div class="form-group">
-                    <label for="tanggal_kembali">Tanggal Kembali</label>
-                    <input type="date" id="tanggal_kembali" v-model="currentReturn.tanggal_kembali" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label for="kondisi_buku">Kondisi Buku</label>
-                    <select id="kondisi_buku" v-model="currentReturn.kondisi_buku" class="form-input">
-                        <option>Baik</option>
-                        <option>Rusak Ringan</option>
-                        <option>Rusak Berat</option>
-                        <option>Hilang</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="denda">Denda (Rp)</label>
-                    <input type="number" id="denda" v-model.number="currentReturn.denda" class="form-input" min="0">
-                </div>
-            </template>
-            <template #footer>
-                <button @click="closeModal" class="btn btn-secondary">Batal</button>
-                <button @click="saveReturn" class="btn btn-primary">Simpan</button>
-            </template>
-        </Modal>
+  <div class="page-container">
+    <div class="page-header">
+      <h1>Data Pengembalian</h1>
+      <button @click="openAddModal" class="btn btn-primary">Tambah Pengembalian</button>
     </div>
+
+    <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nama Peminjam</th>
+            <th>Judul Buku</th>
+            <th>Nomor Resi</th>
+            <th>Tanggal Kembali</th>
+            <th>Kondisi Buku</th>
+            <th>Denda</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="isLoading">
+            <td colspan="8">Memuat data...</td>
+          </tr>
+          <tr v-else-if="returns.length === 0">
+            <td colspan="8">Belum ada data pengembalian.</td>
+          </tr>
+          <tr v-for="item in returns" :key="item.id_pengembalian">
+            <td>{{ item.id_pengembalian }}</td>
+            <td>{{ item.User.nama }}</td>
+            <td>{{ item.Buku.judul }}</td>
+            <td>{{ item.KartuPustaka.nomor_resi }}</td>
+            <td>{{ formatTanggal(item.tanggal_kembali) }}</td>
+            <td>{{ item.kondisi_buku }}</td>
+            <td>Rp {{ item.denda.toLocaleString('id-ID') }}</td>
+            <td>
+              <button @click="deleteReturn(item.id_pengembalian)" class="btn btn-danger">D</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <Modal :show="isModalOpen" @close="closeModal">
+      <template #header>
+        <h3>Tambah Pengembalian</h3>
+      </template>
+      <template #body>
+        <div class="form-group">
+          <label for="peminjaman_id">Pilih Peminjam</label>
+          <select v-model="currentReturn.peminjaman_id" class="form-input" required>
+            <option disabled value="">-- Pilih --</option>
+            <option v-for="item in peminjamanOptions" :key="item.id_peminjaman" :value="item.id_peminjaman">
+              {{ item.user.nama }} - {{ item.buku.judul }}
+            </option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="kondisi_buku">Kondisi Buku</label>
+          <input type="text" id="kondisi_buku" v-model="currentReturn.kondisi_buku" class="form-input" required>
+        </div>
+      </template>
+      <template #footer>
+        <button class="btn btn-secondary" @click="closeModal">Batal</button>
+        <button class="btn btn-primary" @click="saveReturn">Simpan</button>
+      </template>
+    </Modal>
+  </div>
 </template>
+
+<style scoped>
+.page-container {
+  padding: 20px;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.table-container {
+  margin-top: 20px;
+}
+.error-message {
+  color: red;
+}
+.form-group {
+  margin-bottom: 1rem;
+}
+</style>

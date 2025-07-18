@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import AdminLayout from '../components/AdminLayout.vue';
 import AdminLogin from '../views/AdminLogin.vue';
-import AdminRegister from '../views/AdminRegister.vue';
 import Dashboard from '../views/Dashboard.vue';
 import UsersView from '../views/UsersPage.vue';
 import BooksView from '../views/BooksPage.vue';
@@ -14,12 +13,6 @@ const routes = [
     path: '/login',
     name: 'AdminLogin',
     component: AdminLogin,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/register',
-    name: 'AdminRegister',
-    component: AdminRegister, 
     meta: { requiresAuth: false }
   },
   {

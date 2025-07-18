@@ -1,46 +1,38 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, reactive } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
 
-const totalUsers = ref('1,250');
-const totalBooks = ref('8,930');
-const activeLoans = ref('315');
-const overdueBooks = ref('28');
+const API_URL = 'http://localhost:3000/api';
 
-const userRegistrationChart = {
+const totalUsers = ref(0);
+const totalBooks = ref(0);
+const activeLoans = ref(0);
+const overdueBooks = ref(0);
+
+const userRegistrationChart = reactive({
   series: [{
     name: 'Pengguna Baru',
-    data: [31, 40, 28, 51, 42, 109, 100]
+    data: []
   }],
   options: {
-    chart: {
-      height: 350,
-      type: 'area',
-      toolbar: { show: false }
-    },
+    chart: { type: 'area', height: 350, toolbar: { show: false } },
     colors: ['#007BFF'],
     dataLabels: { enabled: false },
     stroke: { curve: 'smooth' },
     xaxis: {
       type: 'datetime',
-      categories: [
-        "2025-07-11T00:00:00.000Z", "2025-07-12T00:00:00.000Z", "2025-07-13T00:00:00.000Z",
-        "2025-07-14T00:00:00.000Z", "2025-07-15T00:00:00.000Z", "2025-07-16T00:00:00.000Z",
-        "2025-07-17T00:00:00.000Z"
-      ],
+      categories: [],
     },
-    tooltip: {
-      x: { format: 'dd MMM yyyy' }
-    },
+    tooltip: { x: { format: 'dd MMM yyyy' } },
   },
-};
+});
 
-const bookCategoryChart = {
-  series: [44, 55, 41, 17, 15],
+const bookCategoryChart = reactive({
+  series: [],
   options: {
     chart: { type: 'donut' },
-    labels: ['Fiksi', 'Sains', 'Sejarah', 'Biografi', 'Komputer'],
-    colors: ['#007BFF', '#00E396', '#FEB019', '#FF4560', '#775DD0'],
+    labels: [],
+    colors: ['#007BFF', '#00E396', '#FEB019', '#FF4560', '#775DD0', '#546E7A', '#E91E63'],
     legend: { position: 'bottom' },
     responsive: [{
       breakpoint: 480,
@@ -50,14 +42,112 @@ const bookCategoryChart = {
       }
     }]
   },
+});
+
+const recentLoans = ref([]);
+
+const fetchDashboardData = async () => {
+  try {
+    const [usersRes, booksRes] = await Promise.all([
+      fetch(`${API_URL}/user`, { credentials: 'include' }),
+      fetch(`${API_URL}/buku`, { credentials: 'include' })
+    ]);
+
+    if (!usersRes.ok || !booksRes.ok) {
+      throw new Error('Gagal mengambil data pengguna atau buku.');
+    }
+
+    const users = await usersRes.json();
+    const books = await booksRes.json();
+
+    totalUsers.value = users.length;
+    totalBooks.value = books.length;
+    processUserChart(users);
+    processCategoryChart(books);
+
+    try {
+      const loansRes = await fetch(`${API_URL}/peminjaman`, { credentials: 'include' });
+      if (loansRes.ok) {
+        const loans = await loansRes.json();
+        processLoanStats(loans);
+        processRecentLoans(loans);
+      } else {
+        console.error('Gagal mengambil data peminjaman, endpoint mungkin belum siap.');
+      }
+    } catch (loanError) {
+      console.error('Terjadi error saat mengambil data peminjaman:', loanError);
+    }
+
+  } catch (error) {
+    console.error('Error fetching primary dashboard data:', error);
+    alert('Gagal memuat data inti dasbor (pengguna dan buku).');
+  }
 };
 
-const recentLoans = ref([
-  { id: 1, book: 'Pengantar Kecerdasan Buatan', user: 'Budi Santoso', status: 'Dipinjam' },
-  { id: 2, book: 'Sejarah Dunia Modern', user: 'Citra Lestari', status: 'Dipinjam' },
-  { id: 3, book: 'Dasar-dasar Vue.js', user: 'Ahmad Dahlan', status: 'Dikembalikan' },
-  { id: 4, book: 'Novel Hujan Bulan Juni', user: 'Dewi Anggraini', status: 'Dipinjam' },
-]);
+const processLoanStats = (loans) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  activeLoans.value = loans.filter(peminjaman => peminjaman.status === 'Dipinjam').length;
+  
+  overdueBooks.value = loans.filter(peminjaman => 
+    peminjaman.status === 'Dipinjam' && peminjaman.tanggal_kembali && new Date(peminjaman.tanggal_kembali) < today
+  ).length;
+};
+
+const processUserChart = (users) => {
+  const userCountsByDate = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateString = d.toISOString().split('T')[0];
+    userCountsByDate[dateString] = 0;
+  }
+
+  users.forEach(user => {
+    if (user.createdAt) {
+      const registrationDate = new Date(user.createdAt).toISOString().split('T')[0];
+      if (userCountsByDate[registrationDate] !== undefined) {
+        userCountsByDate[registrationDate]++;
+      }
+    }
+  });
+
+  userRegistrationChart.options.xaxis.categories = Object.keys(userCountsByDate);
+  userRegistrationChart.series[0].data = Object.values(userCountsByDate);
+};
+
+const processCategoryChart = (books) => {
+  const categoryCounts = {};
+  books.forEach(buku => {
+    const categoryName = buku.kategori?.nama_kategori || 'Tanpa Kategori';
+    categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
+  });
+
+  bookCategoryChart.options.labels = Object.keys(categoryCounts);
+  bookCategoryChart.series = Object.values(categoryCounts);
+};
+
+const processRecentLoans = (loans) => {
+  const sortedLoans = loans.sort((a, b) => b.id_peminjaman - a.id_peminjaman);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  recentLoans.value = sortedLoans.slice(0, 5).map(loan => {
+    const isOverdue = loan.status === 'dipinjam' && loan.tanggal_kembali && new Date(loan.tanggal_kembali) < today;
+    return {
+      id: loan.id_peminjaman,
+      book: loan.buku?.judul || 'Buku Tidak Ditemukan',
+      user: loan.user?.nama || 'Pengguna Tidak Ditemukan',
+      status: loan.status || 'Tidak Diketahui',
+      isOverdue: isOverdue
+    };
+  });
+};
+
+onMounted(() => {
+  fetchDashboardData();
+});
 
 </script>
 
@@ -103,10 +193,6 @@ const recentLoans = ref([
     </div>
 
     <div class="charts-grid">
-      <div class="chart-card large">
-        <h3>Pendaftaran Pengguna (7 Hari Terakhir)</h3>
-        <VueApexCharts type="area" :options="userRegistrationChart.options" :series="userRegistrationChart.series" />
-      </div>
       <div class="chart-card">
         <h3>Komposisi Kategori Buku</h3>
         <VueApexCharts type="donut" :options="bookCategoryChart.options" :series="bookCategoryChart.series" />
@@ -122,10 +208,20 @@ const recentLoans = ref([
             </tr>
           </thead>
           <tbody>
+            <tr v-if="recentLoans.length === 0">
+              <td colspan="3" style="text-align: center;">Data peminjaman belum tersedia</td>
+            </tr>
             <tr v-for="loan in recentLoans" :key="loan.id">
               <td>{{ loan.book }}</td>
               <td>{{ loan.user }}</td>
-              <td><span :class="['status-badge', loan.status.toLowerCase()]">{{ loan.status }}</span></td>
+              <td>
+                <span v-if="loan.isOverdue" class="status-badge terlambat">
+                  Terlambat
+                </span>
+                <span v-else :class="['status-badge', loan.status.toLowerCase().replace(' ', '-')]">
+                  {{ loan.status }}
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -133,3 +229,151 @@ const recentLoans = ref([
     </div>
   </div>
 </template>
+
+<style scoped>
+.dashboard-container {
+  padding: 24px;
+  background-color: #f4f7f6;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.stat-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.stat-icon.users { background-color: #007BFF; }
+.stat-icon.books { background-color: #28a745; }
+.stat-icon.loans { background-color: #ffc107; }
+.stat-icon.overdue { background-color: #dc3545; }
+
+.stat-info h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.stat-info p {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #343a40;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.chart-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.chart-card.large {
+  grid-column: span 2;
+}
+
+.chart-card h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.recent-loans-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.recent-loans-table th, .recent-loans-table td {
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.recent-loans-table th {
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.recent-loans-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-badge.dipinjam {
+  background-color: rgba(255, 193, 7, 0.2);
+  color: #b98900;
+}
+
+.status-badge.dikembalikan {
+  background-color: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.status-badge.terlambat {
+  background-color: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .chart-card.large.table-card {
+      grid-column: span 2;
+  }
+}
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .chart-card.large {
+    grid-column: span 1;
+  }
+}
+</style>

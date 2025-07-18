@@ -136,7 +136,7 @@ main {
 .app-header .avatar {
   height: 40px;
   width: 40px;
-  background-color: var(--color-primary);
+  background-color: #343a40;
   color: var(--color-light);
   border-radius: 50%;
   display: flex;
@@ -1044,7 +1044,6 @@ tbody tr:hover {
     margin-top: 5px;
 }
 
-/* Status Badges (contoh) */
 .status-badge {
     padding: 5px 10px;
     border-radius: 5px;
@@ -1054,18 +1053,21 @@ tbody tr:hover {
 }
 
 .status-badge.baik {
-    background-color: #28a745; /* green */
+    background-color: #28a745; 
 }
 
 .status-badge.rusak-ringan {
-    background-color: #ffc107; /* yellow */
+    background-color: #ffc107; 
     color: #343a40;
 }
 
 .status-badge.rusak-berat {
-    background-color: #fd7e14; /* orange */
+    background-color: #fd7e14; 
 }
 
 .status-badge.hilang {
-    background-color: #dc3545; /* red */
+    background-color: #dc3545;
+}
+.status-badge.terlambat {
+    background-color: #dc3545;
 }

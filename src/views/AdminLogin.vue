@@ -2,16 +2,14 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-// --- State Management ---
 const email = ref('');
 const password = ref('');
 const errorMessage = ref('');
 const router = useRouter();
-const API_URL = 'http://localhost:3000/api'; // Pastikan URL ini benar
+const API_URL = 'http://localhost:3000/api';
 
-// --- Login Handler ---
 const handleLogin = async () => {
-  errorMessage.value = ''; // Reset pesan error setiap kali login dicoba
+  errorMessage.value = '';
   try {
     const response = await fetch(`${API_URL}/user/login`, {
       method: 'POST',
@@ -22,34 +20,26 @@ const handleLogin = async () => {
         email: email.value,
         password: password.value,
       }),
-      // 'credentials: include' penting agar browser mengirim dan menerima cookies dari backend
       credentials: 'include',
     });
 
     const result = await response.json();
 
-    // Jika response dari server tidak OK (misal: status 400, 404, 500)
     if (!response.ok) {
       throw new Error(result.msg || 'Login gagal. Periksa kembali email dan password Anda.');
     }
 
-    // Backend menangani cookie, frontend hanya perlu memeriksa peran (role)
-    // dan mengatur penanda login di localStorage.
     if (result.user && result.user.role === 'admin') {
-      // Simpan data pengguna dan penanda login untuk UI dan router guards
       localStorage.setItem('userData', JSON.stringify(result.user));
-      localStorage.setItem('userToken', 'true'); // Penanda sederhana bahwa user sudah login
+      localStorage.setItem('userToken', 'true');
       
-      // Arahkan ke dashboard setelah login berhasil
       router.push('/dashboard');
     } else {
-      // Jika user bukan admin atau tidak ada data user
       throw new Error('Akses ditolak. Akun ini bukan admin.');
     }
 
   } catch (error) {
     console.error('Login error:', error);
-    // Tampilkan pesan error ke pengguna
     errorMessage.value = error.message;
   }
 };
@@ -96,12 +86,8 @@ const handleLogin = async () => {
               required 
             />
           </div>
-          <button type="submit" class="form-button">Login sebagai Admin</button>
+          <button type="submit" class="form-button">Login</button>
         </form>
-
-        <p class="switch-page-link">
-          Bukan admin? <router-link to="/register">Daftar sebagai pengguna</router-link>
-        </p>
 
       </div>
     </div>
@@ -109,11 +95,10 @@ const handleLogin = async () => {
 </template>
 
 <style scoped>
-/* Anda bisa menaruh semua style yang sudah Anda buat sebelumnya di sini */
 .login-page {
   display: flex;
   height: 100vh;
-  font-family: 'Poppins', sans-serif; /* Pastikan font ini diimpor */
+  font-family: 'Poppins', sans-serif;
 }
 
 .login-visual {

@@ -1,114 +1,130 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
+import { ref, onMounted, reactive, computed } from 'vue';
 import Modal from '../components/Modal.vue';
 
 const API_URL = 'http://localhost:3000/api';
+
 const books = ref([]);
 const categories = ref([]);
 const isModalOpen = ref(false);
-const isEditing = ref(false); // Ref for reactive computed property for conditional rendering of button text.
+const isEditing = ref(false);
+const selectedImageFiles = ref([]);
 
-const currentBook = reactive({
-  id_buku: null,
-  judul: '',
-  penulis: '',
-  penerbit: '',
-  kategori_id: null,
-  stok: 0,
-  tahun_terbit: new Date().getFullYear(),
-  cover: '',
-  sinopsis: '',
+
+const formBook = ref(null);
+
+const imagePreviews = computed(() => {
+  if (!formBook.value) return [];
+
+  if (selectedImageFiles.value.length > 0) {
+    return selectedImageFiles.value.map(file => URL.createObjectURL(file));
+  }
+  if (isEditing.value && Array.isArray(formBook.value.images) && formBook.value.images.length > 0) {
+    return formBook.value.images;
+  }
+  if (isEditing.value && typeof formBook.value.images === 'string' && formBook.value.images.startsWith('http')) {
+      return [formBook.value.images];
+  }
+  return [];
 });
+
+const fetchCategories = async () => {
+  try {
+    const response = await fetch(`${API_URL}/kategori`, { credentials: 'include' });
+    if (!response.ok) throw new Error('Gagal mengambil data kategori');
+    categories.value = await response.json();
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    alert('Gagal memuat data kategori.');
+  }
+};
 
 const fetchBooks = async () => {
   try {
     const response = await fetch(`${API_URL}/buku`, { credentials: 'include' });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || 'Gagal mengambil data buku');
+        if (response.status === 404) {
+            books.value = [];
+            return;
+        }
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
     const dataFromApi = await response.json();
-    const processedBooks = dataFromApi.map(book => ({
-      id: book.id || book.id_buku, // Ensure consistency, use id_buku if id isn't present
-      title: book.judul || book.title,
-      author: book.penulis || book.author,
-      category: book.category || book.kategori_nama, // Assuming kategori_nama comes with book list
-      stok: book.stok,
-      coverUrl: book.cover || 'https://placehold.co/100x150/e2e8f0/667085?text=No+Image',
-    }));
-    books.value = processedBooks;
+    
+    books.value = dataFromApi.map(book => {
+      let coverUrl = 'https://placehold.co/100x150/e2e8f0/667085?text=No+Image';
+
+      if (Array.isArray(book.images) && book.images.length > 0) {
+        coverUrl = book.images[0];
+      } 
+      else if (typeof book.images === 'string' && book.images.startsWith('http')) {
+        coverUrl = book.images;
+      }
+
+      return {
+        id: book.id_buku,
+        title: book.judul,
+        author: book.penulis,
+        category: book.kategori?.nama_kategori || 'Tanpa Kategori',
+        stok: book.stok,
+        coverUrl: coverUrl,
+      };
+    });
   } catch (error) {
     console.error('Error fetching books:', error);
-    alert('Gagal memuat data buku: ' + error.message);
-  }
-};
-
-const fetchCategories = async () => {
-  try {
-    const response = await fetch(`${API_URL}/kategori`, { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`Gagal mengambil data kategori: ${response.statusText}`);
-    }
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error('Tidak ada data kategori yang tersedia.');
-    }
-    categories.value = data;
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    alert('Gagal memuat daftar kategori. Silakan coba lagi.');
+    alert(`Terjadi kesalahan saat memuat data buku: ${error.message}`);
+    books.value = [];
   }
 };
 
 const saveBook = async () => {
-  // Validate kategori_id
-  if (!currentBook.kategori_id || isNaN(currentBook.kategori_id)) {
-    alert('Silakan pilih kategori yang valid.');
+  if (!formBook.value || !formBook.value.judul || !formBook.value.penulis || !formBook.value.penerbit || !formBook.value.kategori_id) {
+    alert('Judul, Penulis, Penerbit, dan Kategori harus diisi');
     return;
   }
-  const bookData = {
-    judul: currentBook.judul,
-    penulis: currentBook.penulis,
-    penerbit: currentBook.penerbit,
-    kategori_id: parseInt(currentBook.kategori_id), // Ensure integer
-    tahun_terbit: currentBook.tahun_terbit,
-    stok: currentBook.stok,
-    cover: currentBook.cover || 'https://placehold.co/100x150/e2e8f0/667085?text=No+Image',
-    sinopsis: currentBook.sinopsis,
-  };
-  try {
-    let response;
-    let url = `${API_URL}/buku`;
-    let method = 'POST';
-    if (isEditing.value) {
-      url = `${API_URL}/buku/${currentBook.id_buku}`; // Use id_buku for update URL
-      method = 'PUT';
+
+  const formData = new FormData();
+  formData.append('judul', formBook.value.judul);
+  formData.append('penulis', formBook.value.penulis);
+  formData.append('penerbit', formBook.value.penerbit);
+  formData.append('kategori_id', formBook.value.kategori_id);
+  formData.append('tahun_terbit', formBook.value.tahun_terbit);
+  formData.append('stok', formBook.value.stok);
+  formData.append('sinopsis', formBook.value.sinopsis || '');
+  
+  if (selectedImageFiles.value.length > 0) {
+    for (const file of selectedImageFiles.value) {
+      formData.append('images', file); 
     }
-    response = await fetch(url, {
+  }
+
+  try {
+    const url = isEditing.value ? `${API_URL}/buku/${formBook.value.id_buku}` : `${API_URL}/buku`;
+    const method = isEditing.value ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bookData),
+      body: formData,
       credentials: 'include',
     });
+
     if (!response.ok) {
-      const errorResult = await response.json();
-      throw new Error(errorResult.msg || 'Gagal menyimpan data buku');
+      const errorResult = await response.json().catch(() => ({ msg: 'Gagal menyimpan data buku' }));
+      throw new Error(errorResult.msg);
     }
+
+    const result = await response.json();
+    alert(result.msg || 'Buku berhasil disimpan');
     await fetchBooks();
     closeModal();
-    alert(isEditing.value ? 'Buku berhasil diperbarui.' : 'Buku berhasil ditambahkan.');
   } catch (error) {
     console.error('Error saving book:', error);
-    alert(`Terjadi kesalahan saat menyimpan data: ${error.message}`);
+    alert(`Terjadi kesalahan: ${error.message}`);
   }
 };
 
 const deleteBook = async (id) => {
-  if (!id || isNaN(id)) {
-    alert('ID buku tidak valid.');
-    return;
-  }
-  if (!confirm('Apakah Anda yakin ingin menghapus buku?')) return;
+  if (!confirm('Apakah Anda yakin ingin menghapus buku ini?')) return;
   try {
     const response = await fetch(`${API_URL}/buku/${id}`, {
       method: 'DELETE',
@@ -123,59 +139,53 @@ const deleteBook = async (id) => {
     await fetchBooks();
   } catch (error) {
     console.error('Error deleting book:', error);
-    alert(`Terjadi kesalahan saat menghapus data: ${error.message}`);
+    alert(`Terjadi kesalahan saat menghapus: ${error.message}`);
   }
 };
 
-const resetCurrentBook = () => {
-  Object.assign(currentBook, {
+const openAddModal = () => {
+  isEditing.value = false;
+  formBook.value = {
     id_buku: null,
     judul: '',
     penulis: '',
     penerbit: '',
-    kategori_id: null, // Reset to null to show placeholder
+    kategori_id: categories.value.length > 0 ? categories.value[0].id_kategori : null,
     stok: 0,
     tahun_terbit: new Date().getFullYear(),
-    cover: '',
+    images: [],
     sinopsis: '',
-  });
-};
-
-const openAddModal = async () => {
-  isEditing.value = false;
-  resetCurrentBook();
-  await fetchCategories(); // Fetch categories to ensure the list is populated
+  };
+  selectedImageFiles.value = [];
   isModalOpen.value = true;
 };
 
 const openEditModal = async (book) => {
+  isEditing.value = true;
+  formBook.value = null; 
+  isModalOpen.value = true;
+  
   try {
-    // Fetch full book data using the ID from the list
     const response = await fetch(`${API_URL}/buku/${book.id}`, { credentials: 'include' });
     if (!response.ok) throw new Error('Gagal mengambil detail buku');
-    const fullBookData = await response.json();
-    isEditing.value = true;
-    await fetchCategories(); // Fetch categories to ensure the list is populated
-    Object.assign(currentBook, {
-      id_buku: fullBookData.id_buku, 
-      judul: fullBookData.judul || fullBookData.title || '',
-      penulis: fullBookData.penulis || fullBookData.author || '',
-      penerbit: fullBookData.penerbit ,
-      kategori_id: fullBookData.kategori_id || null,
-      stok: fullBookData.stok || 0,
-      tahun_terbit: fullBookData.tahun_terbit || new Date().getFullYear(),
-      cover: fullBookData.cover || '',
-      sinopsis: fullBookData.sinopsis || '',
-    });
-    isModalOpen.value = true;
+    
+    formBook.value = await response.json();
+    selectedImageFiles.value = [];
+
   } catch (error) {
     console.error('Error fetching book details:', error);
-    alert('Tidak dapat memuat data detail buku.');
+    alert(`Tidak dapat memuat data detail buku: ${error.message}`);
+    closeModal();
   }
 };
 
 const closeModal = () => {
   isModalOpen.value = false;
+  formBook.value = null;
+};
+
+const handleImageUpload = (event) => {
+  selectedImageFiles.value = Array.from(event.target.files || []);
 };
 
 onMounted(() => {
@@ -183,6 +193,7 @@ onMounted(() => {
   fetchBooks();
 });
 </script>
+
 <template>
   <div class="page-container">
     <div class="page-header">
@@ -204,7 +215,7 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-if="books.length === 0">
-            <td colspan="6" class="text-center">Memuat data atau tidak ada data...</td>
+            <td colspan="7" class="text-center">Memuat data atau tidak ada data buku...</td>
           </tr>
           <tr v-for="book in books" :key="book.id">
             <td>
@@ -224,50 +235,59 @@ onMounted(() => {
         </tbody>
       </table>
     </div>
-    <Modal :show="isModalOpen" @close="closeModal">
+
+    <Modal v-if="isModalOpen && formBook" :show="isModalOpen" @close="closeModal">
       <template #header>
         <h3>{{ isEditing ? 'Edit Buku' : 'Tambah Buku Baru' }}</h3>
       </template>
       <template #body>
         <div class="form-group">
           <label for="judul">Judul</label>
-          <input type="text" id="judul" v-model="currentBook.judul" class="form-input" required>
+          <input type="text" id="judul" v-model="formBook.judul" class="form-input" required>
         </div>
         <div class="form-group">
           <label for="penulis">Penulis</label>
-          <input type="text" id="penulis" v-model="currentBook.penulis" class="form-input" required>
+          <input type="text" id="penulis" v-model="formBook.penulis" class="form-input" required>
         </div>
         <div class="form-group">
           <label for="penerbit">Penerbit</label>
-          <input type="text" id="penerbit" v-model="currentBook.penerbit" class="form-input" required>
+          <input type="text" id="penerbit" v-model="formBook.penerbit" class="form-input" required>
         </div>
         <div class="form-group">
           <label for="kategori">Kategori</label>
-          <select id="kategori" v-model="currentBook.kategori_id" class="form-input" required>
-            <option value="" disabled>Pilih Kategori</option>
+          <select id="kategori" v-model="formBook.kategori_id" class="form-input" required>
+            <option :value="null" disabled>Pilih Kategori</option>
             <option v-for="category in categories" :key="category.id_kategori" :value="category.id_kategori">
               {{ category.nama_kategori }}
             </option>
           </select>
-          <small v-if="categories.length === 0" class="error-text">Tidak ada kategori tersedia. Silakan periksa koneksi API.</small>
         </div>
         <div class="form-group-row">
           <div class="form-group">
             <label for="tahun_terbit">Tahun Terbit</label>
-            <input type="number" id="tahun_terbit" v-model.number="currentBook.tahun_terbit" class="form-input" required>
+            <input type="number" id="tahun_terbit" v-model.number="formBook.tahun_terbit" class="form-input" required>
           </div>
           <div class="form-group">
             <label for="stok">Stok</label>
-            <input type="number" id="stok" v-model.number="currentBook.stok" class="form-input" required>
+            <input type="number" id="stok" v-model.number="formBook.stok" class="form-input" required>
           </div>
         </div>
+
         <div class="form-group">
-          <label for="cover">URL Gambar Sampul</label>
-          <input type="text" id="cover" v-model="currentBook.cover" class="form-input" placeholder="Masukkan URL gambar">
+          <label for="images">Unggah Gambar Sampul</label>
+          <input type="file" id="images" @change="handleImageUpload" class="form-input" accept="image/*" multiple>
+          <div v-if="imagePreviews.length > 0" class="image-preview-container">
+            <div v-for="(src, index) in imagePreviews" :key="index" class="image-preview">
+                <img :src="src" class="preview-image" alt="Pratinjau Sampul">
+            </div>
+          </div>
+          <p class="image-info" v-if="isEditing && selectedImageFiles.length > 0">
+              Gambar baru akan menggantikan semua gambar lama.
+          </p>
         </div>
         <div class="form-group">
           <label for="sinopsis">Sinopsis</label>
-          <textarea id="sinopsis" v-model="currentBook.sinopsis" class="form-input" rows="4"></textarea>
+          <textarea id="sinopsis" v-model="formBook.sinopsis" class="form-input" rows="4"></textarea>
         </div>
       </template>
       <template #footer>
@@ -278,10 +298,38 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
-.error-text {
-  color: red;
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
+<style>
+.preview-image {
+  display: block;
+  width: 100px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.image-preview-container {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.image-preview {
+  margin-top: 0;
+}
+
+.image-info {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+  margin-bottom: 0;
+  width: 100%;
+}
+.book-cover-thumbnail {
+  width: 50px;
+  height: 75px;
+  object-fit: cover;
+  border-radius: 2px;
 }
 </style>
