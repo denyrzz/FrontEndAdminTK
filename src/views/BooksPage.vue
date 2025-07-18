@@ -297,39 +297,3 @@ onMounted(() => {
     </Modal>
   </div>
 </template>
-
-<style>
-.preview-image {
-  display: block;
-  width: 100px;
-  height: 150px;
-  object-fit: cover;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.image-preview-container {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.image-preview {
-  margin-top: 0;
-}
-
-.image-info {
-  font-size: 12px;
-  color: #666;
-  margin-top: 5px;
-  margin-bottom: 0;
-  width: 100%;
-}
-.book-cover-thumbnail {
-  width: 50px;
-  height: 75px;
-  object-fit: cover;
-  border-radius: 2px;
-}
-</style>

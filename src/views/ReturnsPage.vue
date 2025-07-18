@@ -197,23 +197,3 @@ onMounted(() => {
     </Modal>
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  padding: 20px;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.table-container {
-  margin-top: 20px;
-}
-.error-message {
-  color: red;
-}
-.form-group {
-  margin-bottom: 1rem;
-}
-</style>

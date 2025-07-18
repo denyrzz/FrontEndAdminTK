@@ -9,24 +9,6 @@ const totalBooks = ref(0);
 const activeLoans = ref(0);
 const overdueBooks = ref(0);
 
-const userRegistrationChart = reactive({
-  series: [{
-    name: 'Pengguna Baru',
-    data: []
-  }],
-  options: {
-    chart: { type: 'area', height: 350, toolbar: { show: false } },
-    colors: ['#007BFF'],
-    dataLabels: { enabled: false },
-    stroke: { curve: 'smooth' },
-    xaxis: {
-      type: 'datetime',
-      categories: [],
-    },
-    tooltip: { x: { format: 'dd MMM yyyy' } },
-  },
-});
-
 const bookCategoryChart = reactive({
   series: [],
   options: {
@@ -62,7 +44,6 @@ const fetchDashboardData = async () => {
 
     totalUsers.value = users.length;
     totalBooks.value = books.length;
-    processUserChart(users);
     processCategoryChart(books);
 
     try {
@@ -88,33 +69,11 @@ const processLoanStats = (loans) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  activeLoans.value = loans.filter(peminjaman => peminjaman.status === 'Dipinjam').length;
+  activeLoans.value = loans.filter(peminjaman => peminjaman.status === 'dipinjam').length;
   
-  overdueBooks.value = loans.filter(peminjaman => 
-    peminjaman.status === 'Dipinjam' && peminjaman.tanggal_kembali && new Date(peminjaman.tanggal_kembali) < today
-  ).length;
-};
-
-const processUserChart = (users) => {
-  const userCountsByDate = {};
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateString = d.toISOString().split('T')[0];
-    userCountsByDate[dateString] = 0;
-  }
-
-  users.forEach(user => {
-    if (user.createdAt) {
-      const registrationDate = new Date(user.createdAt).toISOString().split('T')[0];
-      if (userCountsByDate[registrationDate] !== undefined) {
-        userCountsByDate[registrationDate]++;
-      }
-    }
-  });
-
-  userRegistrationChart.options.xaxis.categories = Object.keys(userCountsByDate);
-  userRegistrationChart.series[0].data = Object.values(userCountsByDate);
+overdueBooks.value = loans.filter(peminjaman => 
+  peminjaman.status === 'Terlambat'
+).length;
 };
 
 const processCategoryChart = (books) => {
@@ -124,8 +83,14 @@ const processCategoryChart = (books) => {
     categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
   });
 
-  bookCategoryChart.options.labels = Object.keys(categoryCounts);
-  bookCategoryChart.series = Object.values(categoryCounts);
+  const newLabels = Object.keys(categoryCounts);
+  const newSeries = Object.values(categoryCounts);
+
+  bookCategoryChart.series = newSeries;
+  bookCategoryChart.options = {
+    ...bookCategoryChart.options,
+    labels: newLabels
+  };
 };
 
 const processRecentLoans = (loans) => {
@@ -148,7 +113,6 @@ const processRecentLoans = (loans) => {
 onMounted(() => {
   fetchDashboardData();
 });
-
 </script>
 
 <template>
@@ -229,151 +193,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.dashboard-container {
-  padding: 24px;
-  background-color: #f4f7f6;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 24px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  transition: transform 0.2s;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
-.stat-icon svg {
-    width: 24px;
-    height: 24px;
-}
-
-.stat-icon.users { background-color: #007BFF; }
-.stat-icon.books { background-color: #28a745; }
-.stat-icon.loans { background-color: #ffc107; }
-.stat-icon.overdue { background-color: #dc3545; }
-
-.stat-info h4 {
-  margin: 0;
-  font-size: 14px;
-  color: #6c757d;
-  font-weight: 500;
-}
-
-.stat-info p {
-  margin: 4px 0 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #343a40;
-}
-
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.chart-card {
-  background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-}
-
-.chart-card.large {
-  grid-column: span 2;
-}
-
-.chart-card h3 {
-  margin-top: 0;
-  margin-bottom: 20px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.recent-loans-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.recent-loans-table th, .recent-loans-table td {
-  padding: 12px 8px;
-  text-align: left;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.recent-loans-table th {
-    font-size: 14px;
-    font-weight: 600;
-    color: #495057;
-}
-
-.recent-loans-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.status-badge {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.status-badge.dipinjam {
-  background-color: rgba(255, 193, 7, 0.2);
-  color: #b98900;
-}
-
-.status-badge.dikembalikan {
-  background-color: rgba(40, 167, 69, 0.2);
-  color: #28a745;
-}
-
-.status-badge.terlambat {
-  background-color: rgba(220, 53, 69, 0.2);
-  color: #dc3545;
-}
-
-@media (max-width: 1200px) {
-  .charts-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .chart-card.large.table-card {
-      grid-column: span 2;
-  }
-}
-@media (max-width: 768px) {
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-  .chart-card.large {
-    grid-column: span 1;
-  }
-}
-</style>
