@@ -51,7 +51,7 @@ const fetchAvailablePeminjaman = async () => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.msg || 'Gagal memuat data peminjaman');
 
-    peminjamanOptions.value = data;
+    peminjamanOptions.value = data.filter(peminjaman => peminjaman.status === 'Dipinjam');
   } catch (error) {
     alert(error.message);
   }

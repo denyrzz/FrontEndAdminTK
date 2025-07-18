@@ -5,6 +5,7 @@ import AdminLogin from '../views/AdminLogin.vue';
 import Dashboard from '../views/Dashboard.vue';
 import UsersView from '../views/UsersPage.vue';
 import BooksView from '../views/BooksPage.vue';
+import CategoryView from '../views/CategoryPage.vue';
 import LoansView from '../views/LoansPage.vue';
 import ReturnsView from '../views/ReturnsPage.vue';
 
@@ -24,6 +25,7 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: Dashboard },
       { path: 'users', name: 'Users', component: UsersView },
       { path: 'books', name: 'Books', component: BooksView },
+      { path: 'categories', name: 'Categories', component: CategoryView },
       { path: 'loans', name: 'Loans', component: LoansView },
       { path: 'returns', name: 'Returns', component: ReturnsView },
     ]

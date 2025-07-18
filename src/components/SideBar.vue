@@ -29,7 +29,15 @@
               <span>Kelola Buku</span>
             </router-link>
           </li>
-
+          <li>
+            <router-link to="/categories" class="nav-link">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon">
+                <path fill-rule="evenodd" d="M5.25 2.25c-1.105 0-2 .895-2 2v13.5c0 1.105.895 2 2 2h13.5c1.105 0 2-.895 2-2V4.25c0-1.105-.895-2-2-2H5.25zm8.25 4.5a.75.75 0 00-1.5 0v.25H10.5a.75.75 0 000 1.5h1.5V9a.75.75 0 001.5 0V7.5a.75.75 0 00-.75-.75z" clip-rule="evenodd" />
+                <path d="M8.25 8.25a.75.75 0 000 1.5h.75v.75a.75.75 0 001.5 0v-1.5a.75.75 0 00-.75-.75H8.25z" />
+              </svg>
+              <span>Kelola Kategori</span>
+            </router-link>
+          </li>
           <li class="nav-category">Transaksi</li>
           <li>
             <router-link to="/loans" class="nav-link">
